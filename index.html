@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 교안 요약 및 예상문제 생성기</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-md py-4 px-6 flex justify-between items-center">
+        <h1 class="text-xl font-bold">📚 AI 교안 요약 및 4지선다 출제기</h1>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+        <!-- API Key & Model Settings Section -->
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6 border border-indigo-100">
+            <h2 class="text-lg font-semibold mb-2 text-indigo-900">🔑 Gemini 설정 (API 키 및 모델 선택)</h2>
+            <p class="text-sm text-gray-600 mb-4">Gemini API 키를 입력하고, 사용할 AI 모델을 선택해주세요.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">API 키</label>
+                    <div class="flex gap-2">
+                        <input type="password" id="api-key-input" placeholder="AIzaSy... 형식의 API 키를 입력하세요" class="flex-grow border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button id="save-key-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">저장</button>
+                    </div>
+                    <p id="key-status" class="text-xs mt-1 text-gray-500"></p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">사용할 AI 모델 선택</label>
+                    <select id="model-select" class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="gemini-3.8-flash">gemini-3.8-flash (추천 - 최신 표준 모델)</option>
+                        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                        <option value="gemini-1.5-pro">gemini-1.5-pro (고성능)</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- File Upload Section -->
+        <section class="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
+            <h2 class="text-lg font-semibold mb-2 text-gray-800">📂 교안 PDF 업로드</h2>
+            <p class="text-sm text-gray-600 mb-4">학습할 교안 PDF 파일을 첨부하면 AI가 내용을 분석합니다.</p>
+            <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-500 transition cursor-pointer" onclick="document.getElementById('pdf-file').click()">
+                <input type="file" id="pdf-file" accept="application/pdf" class="hidden">
+                <div id="file-label-text" class="text-gray-500 text-sm">
+                    📁 클릭하여 PDF 파일을 선택하거나 여기에 드래그하세요.
+                </div>
+            </div>
+        </section>
+
+        <!-- Action Button -->
+        <div class="text-center mb-8">
+            <button id="generate-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-8 py-3 rounded-xl shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                🚀 핵심 요약 및 4지선다 10문제 생성하기
+            </button>
+        </div>
+
+        <!-- Loading Spinner -->
+        <section id="loading-section" class="hidden text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent mb-4"></div>
+            <p class="text-indigo-900 font-medium" id="loading-text">PDF를 읽고 AI가 분석 중입니다... 잠시만 기다려주세요.</p>
+        </section>
+
+        <!-- Results Section -->
+        <div id="results-container" class="space-y-6 hidden">
+            <!-- Summary Box -->
+            <section class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h3 class="text-xl font-bold text-indigo-900 mb-4 pb-2 border-b border-gray-100">📌 교안 핵심 요약</h3>
+                <div id="summary-content" class="prose max-w-none text-gray-700 text-sm leading-relaxed"></div>
+            </section>
+
+            <!-- Quiz Box -->
+            <section class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h3 class="text-xl font-bold text-indigo-900 mb-4 pb-2 border-b border-gray-100">📝 객관식 예상문제 (4지선다 10문제)</h3>
+                <div id="quiz-content" class="space-y-6"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 text-center py-4 text-xs text-gray-500 mt-auto">
+        AI 기반 교안 분석 웹앱
+    </footer>
+
+    <!-- Script Logic -->
+    <script>
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveKeyBtn = document.getElementById('save-key-btn');
+        const keyStatus = document.getElementById('key-status');
+        const modelSelect = document.getElementById('model-select');
+        const pdfFileInput = document.getElementById('pdf-file');
+        const fileLabelText = document.getElementById('file-label-text');
+        const generateBtn = document.getElementById('generate-btn');
+        const loadingSection = document.getElementById('loading-section');
+        const loadingText = document.getElementById('loading-text');
+        const resultsContainer = document.getElementById('results-container');
+        const summaryContent = document.getElementById('summary-content');
+        const quizContent = document.getElementById('quiz-content');
+
+        let extractedPdfText = "";
+
+        // API Key and Model Load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            if (savedKey) {
+                apiKeyInput.value = savedKey;
+                keyStatus.textContent = "✅ 저장된 API 키가 존재합니다.";
+                keyStatus.className = "text-xs mt-1 text-green-600 font-medium";
+            }
+            const savedModel = localStorage.getItem('gemini_model');
+            if (savedModel) {
+                modelSelect.value = savedModel;
+            }
+        });
+
+        saveKeyBtn.addEventListener('click', () => {
+            const key = apiKeyInput.value.trim();
+            if (!key) {
+                alert('API 키를 입력해주세요.');
+                return;
+            }
+            localStorage.setItem('gemini_api_key', key);
+            keyStatus.textContent = "✅ API 키가 안전하게 저장되었습니다.";
+            keyStatus.className = "text-xs mt-1 text-green-600 font-medium";
+            alert('API 키가 저장되었습니다.');
+        });
+
+        modelSelect.addEventListener('change', () => {
+            localStorage.setItem('gemini_model', modelSelect.value);
+        });
+
+        // PDF File Handler
+        pdfFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileLabelText.textContent = `📄 선택된 파일: ${file.name}`;
+            loadingSection.classList.remove('hidden');
+            loadingText.textContent = "PDF 텍스트를 추출하는 중입니다...";
+            generateBtn.disabled = true;
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let fullText = "";
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += `--- [Page ${i}] ---\n${pageText}\n\n`;
+                }
+
+                extractedPdfText = fullText;
+                loadingSection.classList.add('hidden');
+                generateBtn.disabled = false;
+                alert('PDF 텍스트 추출 완료! 요약 및 문제 생성 버튼을 눌러주세요.');
+            } catch (error) {
+                console.error(error);
+                loadingSection.classList.add('hidden');
+                alert('PDF 파일을 읽는 중 오류가 발생했습니다.');
+            }
+        });
+
+        // Generate Summary & Quiz via Gemini API
+        generateBtn.addEventListener('click', async () => {
+            const apiKey = localStorage.getItem('gemini_api_key');
+            const selectedModel = modelSelect.value;
+
+            if (!apiKey) {
+                alert('상단에서 Gemini API 키를 먼저 입력하고 저장해주세요.');
+                return;
+            }
+            if (!extractedPdfText) {
+                alert('PDF 파일을 먼저 업로드해주세요.');
+                return;
+            }
+
+            loadingSection.classList.remove('hidden');
+            loadingText.textContent = `[${selectedModel}] 모델을 사용하여 분석 중입니다... 잠시만 기다려주세요.`;
+            resultsContainer.classList.add('hidden');
+            generateBtn.disabled = true;
+
+            const prompt = `
+당신은 전문 교육 컨설턴트이자 출제위원입니다. 제공된 교안 내용을 바탕으로 다음 두 가지 작업을 수행해주세요.
+
+1. **교안 핵심 요약**: 학생들이 이해하기 쉽도록 주요 개념과 흐름을 체계적으로 구조화하여 마크다운 형식으로 요약해주세요.
+2. **객관식 4지선다 예상문제 10문제**: 교안의 핵심 내용에서 출제할 수 있는 고품질의 4지선다 객관식 문제 10개를 만들어주세요.
+
+반드시 아래의 **JSON 형식**으로만 정확히 응답해주세요. JSON 외의 어떠한 인사말이나 안내문도 포함하지 마세요.
+
+{
+  "summary": "마크다운 형식의 상세한 요약 내용",
+  "questions": [
+    {
+      "id": 1,
+      "question": "문제 내용",
+      "options": ["1번 보기", "2번 보기", "3번 보기", "4번 보기"],
+      "answer": 0,
+      "explanation": "정답 해설"
+    }
+  ]
+}
+
+[교안 내용]
+${extractedPdfText}
+            `;
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: prompt }]
+                        }],
+                        generationConfig: {
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error?.message || `서버 에러 (${response.status})`);
+                }
+
+                const data = await response.json();
+                const rawText = data.candidates[0].content.parts[0].text;
+                
+                const resultObj = JSON.parse(rawText);
+
+                // Render Summary
+                summaryContent.innerHTML = marked.parse(resultObj.summary || "요약 정보를 불러올 수 없습니다.");
+
+                // Render Quiz
+                quizContent.innerHTML = "";
+                if (resultObj.questions && Array.isArray(resultObj.questions)) {
+                    resultObj.questions.forEach((q, idx) => {
+                        const qDiv = document.createElement('div');
+                        qDiv.className = "p-4 bg-gray-50 rounded-xl border border-gray-200";
+                        
+                        let optionsHtml = '';
+                        q.options.forEach((opt, oIdx) => {
+                            const isCorrect = oIdx === q.answer;
+                            const optionStyle = isCorrect ? "font-bold text-green-700 bg-green-50 border-green-200" : "text-gray-700 bg-white border-gray-200";
+                            optionsHtml += `
+                                <div class="p-2.5 rounded-lg border text-sm flex items-center gap-2 ${optionStyle}">
+                                    <span class="font-semibold">${String.fromCharCode(65 + oIdx)}.</span> 
+                                    <span>${opt}</span>
+                                    ${isCorrect ? '<span class="ml-auto text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">정답</span>' : ''}
+                                </div>
+                            `;
+                        });
+
+                        qDiv.innerHTML = `
+                            <p class="font-semibold text-gray-900 mb-3">Q${idx + 1}. ${q.question}</p>
+                            <div class="grid grid-cols-1 gap-2 mb-3">
+                                ${optionsHtml}
+                            </div>
+                            <div class="text-xs text-gray-600 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                                💡 <span class="font-semibold">해설:</span> ${q.explanation}
+                            </div>
+                        `;
+                        quizContent.appendChild(qDiv);
+                    });
+                }
+
+                loadingSection.classList.add('hidden');
+                resultsContainer.classList.remove('hidden');
+                generateBtn.disabled = false;
+
+            } catch (error) {
+                console.error(error);
+                loadingSection.classList.add('hidden');
+                generateBtn.disabled = false;
+                alert('생성 실패: ' + error.message + '\n선택한 모델이 지원되지 않거나 API 키를 확인해주세요.');
+            }
+        });
+    </script>
+</body>
+</html>
